@@ -1,0 +1,55 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  DIST: dist
+  LDFLAGS: -s -w
+
+tasks:
+  build:
+    desc: Build collector for linux/amd64, windows/amd64 and darwin/arm64
+    deps: [build:linux, build:windows, build:darwin]
+
+  build:linux:
+    desc: Build for Linux x64
+    cmds:
+      - task: build-target
+        vars: { GOOS: linux, GOARCH: amd64 }
+
+  build:windows:
+    desc: Build for Windows x64
+    cmds:
+      - task: build-target
+        vars: { GOOS: windows, GOARCH: amd64 }
+
+  build:darwin:
+    desc: Build for macOS Apple Silicon
+    cmds:
+      - task: build-target
+        vars: { GOOS: darwin, GOARCH: arm64 }
+
+  build-target:
+    internal: true
+    label: build-{{.GOOS}}-{{.GOARCH}}
+    vars:
+      EXT: '{{if eq .GOOS "windows"}}.exe{{end}}'
+    env:
+      CGO_ENABLED: '0'
+      GOOS: '{{.GOOS}}'
+      GOARCH: '{{.GOARCH}}'
+    sources:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - migrations/*.sql
+      - cmd/simulator/data.json
+    generates:
+      - '{{.DIST}}/collector-{{.GOOS}}-{{.GOARCH}}{{.EXT}}'
+      - '{{.DIST}}/simulator-{{.GOOS}}-{{.GOARCH}}{{.EXT}}'
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o {{.DIST}}/collector-{{.GOOS}}-{{.GOARCH}}{{.EXT}} .
+
+  clean:
+    desc: Remove build output
+    cmds:
+      - rm -rf {{.DIST}} .task
