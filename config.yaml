@@ -1,5 +1,5 @@
-#host: 10.0.10.21:502
-host: host.docker.internal:5502
+host: 10.0.10.21:502
+#host: host.docker.internal:5502
 polling_interval_ms: 500
 db_url: postgres://postgres:postgres@timescaledb:5432/app?sslmode=disable
 
