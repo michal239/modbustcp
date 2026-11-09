@@ -21,8 +21,13 @@ services:
       CONFIG: /config.yaml
     volumes:
       - ./config.yaml:/config.yaml:ro
+      - .:/src:ro
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    ports:
+      - "8080:8080"
     extra_hosts:
-      - "host.docker.internal:host-gateway" # needed on Linux, built in on Docker Desktop
+      - "host.docker.internal:host-gateway"
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -45,3 +50,5 @@ services:
 volumes:
   timescale-data:
   grafana-data:
+  go-mod:
+  go-build:

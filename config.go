@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"slices"
@@ -16,6 +17,7 @@ import (
 const (
 	defaultModbusPort = "502"
 	defaultDBURL      = "postgres://postgres:postgres@localhost:5432/app?sslmode=disable"
+	defaultHTTPListen = ":8080"
 )
 
 type Config struct {
@@ -29,6 +31,8 @@ type Config struct {
 	Device string `yaml:"device"`
 	// Registers to poll.
 	Registers []Register `yaml:"registers"`
+
+	HTTPListen string `yaml:"http_listen"`
 }
 
 type RegisterType string
@@ -65,11 +69,63 @@ type Register struct {
 	// Optional, informational.
 	Unit        string `yaml:"unit"`
 	Description string `yaml:"description"`
+
+	Min *float64 `yaml:"min"`
+	Max *float64 `yaml:"max"`
 }
 
 // Size returns the number of 16-bit registers the value occupies.
 func (r *Register) Size() int {
 	return 2 // float32 and uint32 both span two registers
+}
+
+func (r *Register) validateRange() error {
+	if r.Min == nil && r.Max == nil {
+		return nil
+	}
+	if r.Kind != KindHolding {
+		return errors.New("min/max are allowed only for holding registers")
+	}
+	for _, b := range []*float64{r.Min, r.Max} {
+		if b != nil {
+			if err := r.checkType(*b); err != nil {
+				return fmt.Errorf("min/max: %w", err)
+			}
+		}
+	}
+	if r.Min != nil && r.Max != nil && *r.Min > *r.Max {
+		return fmt.Errorf("min %g is greater than max %g", *r.Min, *r.Max)
+	}
+	return nil
+}
+
+func (r *Register) checkType(v float64) error {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return errors.New("value must be a finite number")
+	}
+	if r.Type == TypeUint32 {
+		if v != math.Trunc(v) || v < 0 || v > math.MaxUint32 {
+			return fmt.Errorf("%g is not a valid uint32", v)
+		}
+		return nil
+	}
+	if math.Abs(v) > math.MaxFloat32 {
+		return fmt.Errorf("%g is out of float32 range", v)
+	}
+	return nil
+}
+
+func (r *Register) checkValue(v float64) error {
+	if err := r.checkType(v); err != nil {
+		return err
+	}
+	if r.Min != nil && v < *r.Min {
+		return fmt.Errorf("%g is below min %g", v, *r.Min)
+	}
+	if r.Max != nil && v > *r.Max {
+		return fmt.Errorf("%g is above max %g", v, *r.Max)
+	}
+	return nil
 }
 
 // compareRegisters orders registers by kind, then address.
@@ -114,6 +170,9 @@ func validateRegisters(regs []Register) error {
 		if r.Every < 0 {
 			return fmt.Errorf("register %q: every must be >= 1", r.Name)
 		}
+		if err := r.validateRange(); err != nil {
+			return fmt.Errorf("register %q: %w", r.Name, err)
+		}
 	}
 
 	sorted := slices.Clone(regs)
@@ -155,6 +214,9 @@ func loadConfig() (*Config, error) {
 	}
 	if cfg.Device == "" {
 		return nil, errors.New("device is required")
+	}
+	if cfg.HTTPListen == "" {
+		cfg.HTTPListen = defaultHTTPListen
 	}
 	if err := validateRegisters(cfg.Registers); err != nil {
 		return nil, err

@@ -1,9 +1,7 @@
-FROM golang:1.25-alpine AS build
+FROM golang:1.25-alpine
 WORKDIR /src
-COPY go.mod go.sum* ./
+ENV CGO_ENABLED=0
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 go build -o /app .
-
-FROM alpine:3.20
-COPY --from=build /app /app
-ENTRYPOINT ["/app"]
+CMD ["sh", "-c", "go build -buildvcs=false -o /tmp/collector . && exec /tmp/collector"]

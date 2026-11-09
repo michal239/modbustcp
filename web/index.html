@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rejestry holding</title>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c1f24;
+  --muted: #646b75;
+  --border: #dde1e6;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --changed: #fff6d6;
+  --error: #c62828;
+  --error-bg: #fdecec;
+  --ok: #1b7f3b;
+  --ok-bg: #e8f5ec;
+  --warn: #9a6200;
+  --warn-bg: #fff4e0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a;
+    --surface: #1e2125;
+    --text: #e6e8eb;
+    --muted: #9aa1ab;
+    --border: #33373d;
+    --accent: #5b8def;
+    --accent-text: #0d1117;
+    --changed: #3a3320;
+    --error: #ff7b72;
+    --error-bg: #3a1f1f;
+    --ok: #56d37f;
+    --ok-bg: #1b3324;
+    --warn: #f0b45a;
+    --warn-bg: #3a2e1a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px 16px;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1000px; margin: 0 auto; }
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+.device { color: var(--muted); margin-top: 2px; }
+.device .name { color: var(--text); }
+.device .host { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; margin-left: 8px; }
+.actions { display: flex; gap: 8px; }
+button {
+  font: inherit;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button:disabled { opacity: .5; cursor: default; }
+#status {
+  min-height: 1.45em;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+#status:empty { padding: 0; }
+#status.ok { background: var(--ok-bg); color: var(--ok); }
+#status.error { background: var(--error-bg); color: var(--error); }
+#status.warn { background: var(--warn-bg); color: var(--warn); }
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; }
+tbody tr:last-child td { border-bottom: none; }
+tr.changed td { background: var(--changed); }
+.name { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.desc, .range { color: var(--muted); font-size: 13px; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+input {
+  font: inherit;
+  width: 140px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+tr.invalid input { border-color: var(--error); outline-color: var(--error); }
+.error { color: var(--error); font-size: 13px; }
+dialog {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 20px;
+  width: min(640px, calc(100vw - 32px));
+}
+dialog::backdrop { background: rgb(0 0 0 / .45); }
+dialog .actions { justify-content: flex-end; margin-top: 16px; }
+.old { color: var(--muted); text-decoration: line-through; }
+.new { font-weight: 600; }
+.drift { color: var(--warn); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Rejestry holding</h1>
+      <div id="device" class="device"></div>
+    </div>
+    <div class="actions">
+      <button id="refresh" type="button">Odśwież</button>
+      <button id="review" type="button" class="primary" disabled>Pokaż zmiany</button>
+    </div>
+  </header>
+  <p id="status" role="status"></p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Rejestr</th><th>Zakres</th><th>Na urządzeniu</th><th>Nowa wartość</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+
+<dialog id="diff">
+  <h2>Zmiany do zapisania</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Rejestr</th><th>Obecnie</th><th>Nowa</th></tr>
+      </thead>
+      <tbody id="diff-rows"></tbody>
+    </table>
+  </div>
+  <div class="actions">
+    <button id="cancel" type="button">Anuluj</button>
+    <button id="save" type="button" class="primary">Zapisz na urządzeniu</button>
+  </div>
+</dialog>
+
+<script>
+const UINT32_MAX = 4294967295;
+const FLOAT32_MAX = 3.4028234663852886e38;
+const NUMBER_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
+const rowsEl = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const deviceEl = document.getElementById('device');
+const refreshBtn = document.getElementById('refresh');
+const reviewBtn = document.getElementById('review');
+const dialog = document.getElementById('diff');
+const diffRowsEl = document.getElementById('diff-rows');
+const saveBtn = document.getElementById('save');
+
+let registers = [];
+const inputs = new Map();
+let pending = {};
+
+function show(v, unit) {
+  if (v === null || v === undefined) return '—';
+  return unit ? `${v} ${unit}` : String(v);
+}
+
+function rangeText(r) {
+  if (r.min == null && r.max == null) return '—';
+  return `${r.min ?? '−∞'} … ${r.max ?? '∞'}`;
+}
+
+function parse(r, text) {
+  const s = text.trim().replace(',', '.');
+  if (s === '') return { error: 'Podaj wartość' };
+  if (!NUMBER_RE.test(s)) return { error: 'To nie jest liczba' };
+  const v = Number(s);
+  if (!Number.isFinite(v)) return { error: 'To nie jest liczba' };
+  if (r.type === 'uint32' && (!Number.isInteger(v) || v < 0 || v > UINT32_MAX)) {
+    return { error: `Wymagana liczba całkowita 0…${UINT32_MAX}` };
+  }
+  if (r.type === 'float32' && Math.abs(v) > FLOAT32_MAX) return { error: 'Poza zakresem float32' };
+  if (r.min != null && v < r.min) return { error: `Minimum to ${r.min}` };
+  if (r.max != null && v > r.max) return { error: `Maksimum to ${r.max}` };
+  return { value: v };
+}
+
+function state(r) {
+  const input = inputs.get(r.name);
+  const p = parse(r, input.value);
+  const changed = p.error ? input.value.trim() !== String(r.value ?? '') : p.value !== r.value;
+  return { ...p, changed };
+}
+
+function setStatus(text, kind) {
+  statusEl.textContent = text;
+  statusEl.className = kind || '';
+}
+
+function setBusy(busy) {
+  refreshBtn.disabled = busy;
+  saveBtn.disabled = busy;
+  if (busy) reviewBtn.disabled = true;
+  else updateReview();
+}
+
+function updateRow(tr, r) {
+  const s = state(r);
+  tr.classList.toggle('changed', s.changed);
+  tr.classList.toggle('invalid', s.changed && !!s.error);
+  tr.querySelector('.error').textContent = s.changed && s.error ? s.error : '';
+  updateReview();
+}
+
+function updateReview() {
+  let changed = 0;
+  let invalid = false;
+  for (const r of registers) {
+    const s = state(r);
+    if (s.changed) changed++;
+    if (s.changed && s.error) invalid = true;
+  }
+  reviewBtn.disabled = changed === 0 || invalid;
+  reviewBtn.textContent = changed ? `Pokaż zmiany (${changed})` : 'Pokaż zmiany';
+}
+
+function cell(tr, className, text) {
+  const td = tr.insertCell();
+  if (className) td.className = className;
+  if (text !== undefined) td.textContent = text;
+  return td;
+}
+
+function render(list, reset = new Set()) {
+  const kept = new Map();
+  for (const r of registers) {
+    if (!reset.has(r.name) && inputs.has(r.name) && state(r).changed) {
+      kept.set(r.name, inputs.get(r.name).value);
+    }
+  }
+
+  registers = list;
+  inputs.clear();
+  rowsEl.replaceChildren();
+
+  for (const r of list) {
+    const tr = rowsEl.insertRow();
+
+    const nameTd = cell(tr);
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = r.name;
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = r.description;
+    nameTd.append(name, desc);
+
+    cell(tr, 'range num', rangeText(r) + (r.unit && (r.min != null || r.max != null) ? ` ${r.unit}` : ''));
+    cell(tr, 'num', show(r.value, r.unit));
+
+    const inputTd = cell(tr);
+    const input = document.createElement('input');
+    input.inputMode = r.type === 'uint32' ? 'numeric' : 'decimal';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('aria-label', `Nowa wartość ${r.name}`);
+    input.value = kept.get(r.name) ?? String(r.value ?? '');
+    const err = document.createElement('div');
+    err.className = 'error';
+    inputTd.append(input, err);
+
+    inputs.set(r.name, input);
+    input.addEventListener('input', () => updateRow(tr, r));
+  }
+
+  for (const [i, r] of list.entries()) updateRow(rowsEl.rows[i], r);
+  updateReview();
+}
+
+function showDevice(data) {
+  if (!data.device && !data.host) return;
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = data.device;
+  const host = document.createElement('span');
+  host.className = 'host';
+  host.textContent = data.host;
+  deviceEl.replaceChildren(name, host);
+  document.title = `${data.device} - ${data.host}`;
+}
+
+async function api(method, body) {
+  const res = await fetch('api/holding', {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  showDevice(data);
+  if (!res.ok) {
+    const e = new Error(data.error || `HTTP ${res.status}`);
+    e.data = data;
+    throw e;
+  }
+  return data;
+}
+
+function now() {
+  return new Date().toLocaleTimeString('pl-PL');
+}
+
+async function load() {
+  setBusy(true);
+  setStatus('Odczyt z urządzenia…');
+  try {
+    const data = await api('GET');
+    render(data.registers);
+    setStatus(`Odczytano z urządzenia o ${now()}`, 'ok');
+  } catch (e) {
+    if (e.data && e.data.registers) render(e.data.registers);
+    setStatus(`Błąd odczytu: ${e.message}`, 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function review() {
+  const changes = [];
+  for (const r of registers) {
+    const s = state(r);
+    if (s.changed && !s.error) changes.push({ r, value: s.value });
+  }
+  if (changes.length === 0) return;
+
+  setBusy(true);
+  setStatus('Odczyt aktualnych wartości…');
+  let fresh;
+  try {
+    fresh = await api('GET');
+  } catch (e) {
+    setStatus(`Błąd odczytu: ${e.message}`, 'error');
+    setBusy(false);
+    return;
+  }
+  const freshByName = new Map(fresh.registers.map(r => [r.name, r]));
+
+  pending = {};
+  diffRowsEl.replaceChildren();
+  for (const { r, value } of changes) {
+    const current = freshByName.get(r.name)?.value;
+    if (current === value) continue;
+    pending[r.name] = value;
+
+    const tr = diffRowsEl.insertRow();
+    cell(tr, 'name', r.name);
+    const oldTd = cell(tr, 'num');
+    const old = document.createElement('span');
+    old.className = 'old';
+    old.textContent = show(current, r.unit);
+    oldTd.append(old);
+    if (current !== r.value) {
+      const drift = document.createElement('div');
+      drift.className = 'drift';
+      drift.textContent = `zmieniono na urządzeniu od wczytania (było ${show(r.value, r.unit)})`;
+      oldTd.append(drift);
+    }
+    cell(tr, 'num new', show(value, r.unit));
+  }
+
+  render(fresh.registers);
+  setBusy(false);
+
+  if (Object.keys(pending).length === 0) {
+    setStatus('Brak zmian: urządzenie ma już te wartości.', 'ok');
+    return;
+  }
+  setStatus('');
+  dialog.showModal();
+}
+
+function applyResult(list, written, error) {
+  render(list, new Set(Object.keys(written)));
+  if (error) {
+    setStatus(`Błąd zapisu: ${error}`, 'error');
+    return;
+  }
+  const byName = new Map(list.map(r => [r.name, r]));
+  const mismatches = [];
+  for (const [name, sent] of Object.entries(written)) {
+    const r = byName.get(name);
+    const same = r.type === 'float32' ? Math.fround(r.value) === Math.fround(sent) : r.value === sent;
+    if (!same) mismatches.push(`${name} = ${show(r.value, r.unit)} (wysłano ${sent})`);
+  }
+  if (mismatches.length) {
+    setStatus(`Zapisano, ale urządzenie zwraca inne wartości: ${mismatches.join(', ')}`, 'warn');
+  } else {
+    setStatus(`Zapisano ${Object.keys(written).length} rej. o ${now()}, odczyt kontrolny zgodny.`, 'ok');
+  }
+}
+
+async function save() {
+  const written = pending;
+  dialog.close();
+  setBusy(true);
+  setStatus('Zapis na urządzeniu…');
+  try {
+    const data = await api('POST', { values: written });
+    applyResult(data.registers, written);
+  } catch (e) {
+    if (e.data && e.data.registers && e.data.registers.length) applyResult(e.data.registers, written, e.message);
+    else setStatus(`Błąd zapisu: ${e.message}`, 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+refreshBtn.addEventListener('click', load);
+reviewBtn.addEventListener('click', review);
+saveBtn.addEventListener('click', save);
+document.getElementById('cancel').addEventListener('click', () => dialog.close());
+
+load();
+</script>
+</body>
+</html>

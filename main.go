@@ -77,6 +77,22 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	holdingReqs := make(chan holdingRequest)
+	holdingBlks := holdingBlocks(blocks)
+	srv, panelURL, err := startServer(cfg, holdingReqs)
+	if err != nil {
+		log.Fatalf("http server: %v", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+	log.Printf("holding registers panel at %s", panelURL)
+	if err := openBrowser(panelURL); err != nil {
+		log.Printf("cannot open browser: %v", err)
+	}
+
 	poolCfg, err := pgxpool.ParseConfig(cfg.DBURL)
 	if err != nil {
 		log.Fatalf("parse db config: %v", err)
@@ -110,20 +126,6 @@ func main() {
 		log.Fatalf("modbus client config: %v", err)
 	}
 
-	// Retry until the device is reachable.
-	for {
-		if err = client.Open(); err == nil {
-			break
-		}
-		log.Printf("connect to %s failed: %v, retrying in 2s", modbusURL, err)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(2 * time.Second):
-		}
-	}
-	defer client.Close()
-	log.Printf("connected to Modbus TCP device at %s (unit %d)", modbusURL, unitID)
 	if err = client.SetUnitId(unitID); err != nil {
 		log.Fatalf("set unit id: %v", err)
 	}
@@ -131,6 +133,12 @@ func main() {
 	if err = client.SetEncoding(modbus.BIG_ENDIAN, modbus.HIGH_WORD_FIRST); err != nil {
 		log.Fatalf("set encoding: %v", err)
 	}
+
+	conn := &connection{client: client, url: modbusURL}
+	if !conn.open(ctx, holdingReqs) {
+		return
+	}
+	defer client.Close()
 
 	ticker := time.NewTicker(cfg.PollInterval())
 	defer ticker.Stop()
@@ -142,6 +150,10 @@ func main() {
 		case <-ctx.Done():
 			log.Println("shutting down")
 			return
+		case req := <-holdingReqs:
+			if conn.lost(handleHolding(client, holdingBlks, req)) && !conn.reconnect(ctx, holdingReqs) {
+				return
+			}
 		case <-ticker.C:
 			reqStart := time.Now()
 			var rows [][]any
@@ -151,6 +163,13 @@ func main() {
 					continue
 				}
 				words, err := client.ReadRegisters(b.start, b.size, b.kind.modbusType())
+				if conn.lost(err) {
+					log.Printf("cannot read %s registers %d..%d: %v", b.kind, b.start, b.start+b.size-1, err)
+					if !conn.reconnect(ctx, holdingReqs) {
+						return
+					}
+					break
+				}
 				if err != nil {
 					log.Printf("cannot read %s registers %d..%d: %v", b.kind, b.start, b.start+b.size-1, err)
 					continue

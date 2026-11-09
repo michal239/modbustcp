@@ -1,9 +1,11 @@
-host: 10.0.10.21:502
-#host: host.docker.internal:5502
+#host: 10.0.10.21:502
+host: host.docker.internal:5502
 polling_interval_ms: 500
 db_url: postgres://postgres:postgres@timescaledb:5432/app?sslmode=disable
 
 device: ModbusTCP
+
+http_listen: ":8080"
 
 registers:
   # rejestry read adresy 3nnnn
@@ -30,24 +32,24 @@ registers:
   - { name: uVersion, address: 40, type: uint32,  every: 8,           description: "Wersja oprogramowania" }
 
   # rejestry r/w (holding) adresy 4nnnn
-  - { name: rUHVmax,       kind: holding, address: 0,  type: float32, every: 8, unit: V, description: "Maksymalne napięcie obwodu pośredniczącego DC" }
-  - { name: rULVmax,       kind: holding, address: 2,  type: float32, every: 8, unit: V, description: "Maksymalne napięcie odbiornika" }
-  - { name: rUHVmin,       kind: holding, address: 4,  type: float32, every: 8, unit: V, description: "Minimalne napięcie obwodu pośredniczącego DC" }
-  - { name: rULVmin,       kind: holding, address: 6,  type: float32, every: 8, unit: V, description: "Minimalne napięcie odbiornika" }
-  - { name: rIHVmax,       kind: holding, address: 8,  type: float32, every: 8, unit: A, description: "Maksymalny prąd obwodu pośredniczącego DC" }
-  - { name: rILVmax,       kind: holding, address: 10, type: float32, every: 8, unit: A, description: "Maksymalny prąd odbiornika" }
-  - { name: rSPSman,       kind: holding, address: 12, type: float32, every: 8, unit: °, description: "Kąt modulacji SPS w trybie manualnym" }
-  - { name: rDPSman,       kind: holding, address: 14, type: float32, every: 8, unit: °, description: "Kąt modulacji DPS w trybie manualnym" }
-  - { name: rEref,         kind: holding, address: 16, type: float32, every: 8,          description: "Zadana wartość referencyjna regulatora" }
-  - { name: rKp_U,         kind: holding, address: 18, type: float32, every: 8,          description: "Współczynnik proporcjonalny regulatora PI napięcia" }
-  - { name: rki_U,         kind: holding, address: 20, type: float32, every: 8,          description: "Współczynnik całkujący regulatora PI napięcia" }
-  - { name: rKp_I,         kind: holding, address: 22, type: float32, every: 8,          description: "Współczynnik proporcjonalny regulatora PI prądu" }
-  - { name: rki_I,         kind: holding, address: 24, type: float32, every: 8,          description: "Współczynnik całkujący regulatora PI prądu" }
-  - { name: rUHVstart,     kind: holding, address: 26, type: float32, every: 8, unit: V, description: "Napięcie ładowania obwodu pośredniczącego DC" }
-  - { name: rULVstart,     kind: holding, address: 28, type: float32, every: 8, unit: V, description: "Napięcie ładowania po stronie odbiornika" }
-  - { name: uState,        kind: holding, address: 30, type: uint32,  every: 8,          description: "Aktualny tryb pracy" }
-  - { name: uReg_side,     kind: holding, address: 32, type: uint32,  every: 8,          description: "Wybór strony regulacji" }
-  - { name: uConvertOnOff, kind: holding, address: 34, type: uint32,  every: 8,          description: "Parametr serwisowy" }
-  - { name: uConvertSleep, kind: holding, address: 36, type: uint32,  every: 8,          description: "Podgląd statusu pracy" }
-  - { name: uID,           kind: holding, address: 38, type: uint32,  every: 8,          description: "Numer ID" }
-  - { name: uMaster,       kind: holding, address: 40, type: uint32,  every: 8,          description: "Tryb pracy przekształtnika" }
+  - { name: rUHVmax,       kind: holding, address: 0,  type: float32, every: 8, min: 0, max: 800, unit: V, description: "Maksymalne napięcie obwodu pośredniczącego DC" }
+  - { name: rULVmax,       kind: holding, address: 2,  type: float32, every: 8, min: 0, max: 100, unit: V, description: "Maksymalne napięcie odbiornika" }
+  - { name: rUHVmin,       kind: holding, address: 4,  type: float32, every: 8, min: 0, max: 800, unit: V, description: "Minimalne napięcie obwodu pośredniczącego DC" }
+  - { name: rULVmin,       kind: holding, address: 6,  type: float32, every: 8, min: 0, max: 100, unit: V, description: "Minimalne napięcie odbiornika" }
+  - { name: rIHVmax,       kind: holding, address: 8,  type: float32, every: 8, min: 0, max: 50,  unit: A, description: "Maksymalny prąd obwodu pośredniczącego DC" }
+  - { name: rILVmax,       kind: holding, address: 10, type: float32, every: 8, min: 0, max: 50,  unit: A, description: "Maksymalny prąd odbiornika" }
+  - { name: rSPSman,       kind: holding, address: 12, type: float32, every: 8, min: 0, max: 180, unit: °, description: "Kąt modulacji SPS w trybie manualnym" }
+  - { name: rDPSman,       kind: holding, address: 14, type: float32, every: 8, min: 0, max: 180, unit: °, description: "Kąt modulacji DPS w trybie manualnym" }
+  - { name: rEref,         kind: holding, address: 16, type: float32, every: 8, min: 0, max: 800,          description: "Zadana wartość referencyjna regulatora" }
+  - { name: rKp_U,         kind: holding, address: 18, type: float32, every: 8, min: 0, max: 100,          description: "Współczynnik proporcjonalny regulatora PI napięcia" }
+  - { name: rki_U,         kind: holding, address: 20, type: float32, every: 8, min: 0, max: 100,          description: "Współczynnik całkujący regulatora PI napięcia" }
+  - { name: rKp_I,         kind: holding, address: 22, type: float32, every: 8, min: 0, max: 100,          description: "Współczynnik proporcjonalny regulatora PI prądu" }
+  - { name: rki_I,         kind: holding, address: 24, type: float32, every: 8, min: 0, max: 100,          description: "Współczynnik całkujący regulatora PI prądu" }
+  - { name: rUHVstart,     kind: holding, address: 26, type: float32, every: 8, min: 0, max: 800, unit: V, description: "Napięcie ładowania obwodu pośredniczącego DC" }
+  - { name: rULVstart,     kind: holding, address: 28, type: float32, every: 8, min: 0, max: 100, unit: V, description: "Napięcie ładowania po stronie odbiornika" }
+  - { name: uState,        kind: holding, address: 30, type: uint32,  every: 8, min: 0, max: 10,           description: "Aktualny tryb pracy" }
+  - { name: uReg_side,     kind: holding, address: 32, type: uint32,  every: 8, min: 0, max: 1,            description: "Wybór strony regulacji" }
+  - { name: uConvertOnOff, kind: holding, address: 34, type: uint32,  every: 8, min: 0, max: 1,            description: "Parametr serwisowy" }
+  - { name: uConvertSleep, kind: holding, address: 36, type: uint32,  every: 8, min: 0, max: 1,            description: "Podgląd statusu pracy" }
+  - { name: uID,           kind: holding, address: 38, type: uint32,  every: 8, min: 1, max: 247,          description: "Numer ID" }
+  - { name: uMaster,       kind: holding, address: 40, type: uint32,  every: 8, min: 0, max: 1,            description: "Tryb pracy przekształtnika" }
